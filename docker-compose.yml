@@ -1,0 +1,6 @@
+services:
+  scanner:
+    build:
+      context: .
+    image: port-scanner:local
+    network_mode: host
