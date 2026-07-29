@@ -4,3 +4,12 @@ services:
       context: .
     image: port-scanner:local
     network_mode: host
+    command:
+      - -target
+      - 127.0.0.1
+      - -ports
+      - 1-1024
+      - -workers
+      - "100"
+      - -timeout
+      - 500ms

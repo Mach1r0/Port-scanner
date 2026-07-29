@@ -1,112 +1,205 @@
-# Port Scanner (Worker Pool) — Go
-
-Scanner de portas TCP concorrente, construído para aprender e demonstrar o modelo de concorrência do Go (goroutines, channels, worker pool) aplicado a um caso real de reconhecimento de rede.
-
-## Requisitos funcionais
-
-- [ ] Receber um alvo (IP ou hostname) e um range de portas via flags de CLI
-- [ ] Escanear portas TCP usando `net.DialTimeout`
-- [ ] Implementar via **worker pool** (número de workers configurável), não goroutine-por-porta
-- [ ] Agregar resultados via channel dedicado (`results channel`)
-- [ ] Sincronizar finalização com `sync.WaitGroup`
-- [ ] Output estruturado (tabela no terminal e/ou JSON) com: porta, status (open/closed/filtered), tempo de resposta
-- [ ] Timeout configurável por conexão (evitar travar em portas com DROP silencioso)
-- [ ] Modo verbose (mostra progresso) e modo silencioso (só resultado final)
-
-## Requisitos não funcionais
-
-- [ ] Rodar `go vet` e `golangci-lint` sem warnings
-- [ ] Cobertura de testes nas funções principais (parsing de flags, worker, agregação de resultado)
-- [ ] Detector de race conditions limpo (`go test -race`)
-- [ ] Benchmark comparando execução sequencial vs. worker pool (documentado no README com números reais)
-
-## Requisitos técnicos / flags sugeridas
-
-```
--target       string  IP ou hostname alvo (obrigatório)
--ports        string  Range de portas, ex: "1-1000" ou "22,80,443" (default: "1-1024")
--workers      int     Número de workers concorrentes (default: 100)
--timeout      duration Timeout por conexão, ex: "500ms" (default: 1s)
--output       string  Formato de saída: "table" ou "json" (default: "table")
--verbose      bool    Mostra progresso em tempo real (default: false)
-```
-
-## Estrutura de pastas sugerida
-
-```
-port-scanner/
-├── cmd/
-│   └── scanner/
-│       └── main.go
-├── internal/
-│   ├── scanner/
-│   │   ├── worker.go
-│   │   ├── scanner.go
-│   │   └── scanner_test.go
-│   └── output/
-│       ├── table.go
-│       └── json.go
-├── benchmark/
-│   └── results.md
-├── go.mod
-├── README.md
-└── LICENSE
-```
-
-## Critérios de "pronto"
-
-1. Escaneia 1000 portas em um host local em menos de alguns segundos com 100 workers
-2. Testes passam com `-race` ativado
-3. README final com benchmark comparativo (sequencial vs. worker pool) e print de execução
-4. Código no GitHub com commits incrementais (não um único commit gigante) — isso importa para quem for revisar seu histórico
-
----
-
-## README.md (rascunho para o repositório)
-
-```markdown
 # Port Scanner
 
-Scanner de portas TCP concorrente escrito em Go, usando o padrão Worker Pool
-para evitar exaustão de descritores de arquivo e maximizar throughput sem
-sobrecarregar a rede alvo.
+A concurrent TCP port scanner written in Go. It uses a bounded worker pool,
+channels, and `sync.WaitGroup` to scan many ports without creating one
+goroutine per port.
 
-## Por que Worker Pool?
+> Only scan systems you own or have explicit permission to test.
 
-Escanear 65.535 portas sequencialmente é lento demais para uso prático.
-Por outro lado, disparar uma goroutine por porta esgota os descritores de
-arquivo do sistema operacional rapidamente. O padrão Worker Pool resolve
-isso limitando o número de conexões concorrentes a um valor configurável,
-mantendo alta performance sem instabilidade.
+## Features
 
-## Instalação
+- Single ports, comma-separated lists, and ranges
+- Configurable worker count and connection timeout
+- TCP status classification: `open`, `closed`, or `filtered`
+- Deterministic results sorted by port
+- Human-readable table and JSON output
+- Optional real-time progress on stderr
+- Race-tested worker pool
+- Multi-stage Docker image and Docker Compose service
+- GitHub Actions checks for tests, `go vet`, and `golangci-lint`
 
-\`\`\`bash
-git clone https://github.com/SEU_USUARIO/port-scanner
+## Requirements
+
+- Go 1.26 or newer
+- Docker and Docker Compose are optional
+
+## Build
+
+```bash
+git clone https://github.com/Mach1r0/port-scanner.git
 cd port-scanner
 go build -o scanner ./cmd/scanner
-\`\`\`
+```
 
-## Uso
+## Usage
 
-\`\`\`bash
-./scanner -target 192.168.1.1 -ports 1-1000 -workers 100
-\`\`\`
+```bash
+./scanner -target 127.0.0.1 -ports 1-1000 -workers 100
+```
+
+You can also run the source directly:
+
+```bash
+go run ./cmd/scanner \
+  -target 127.0.0.1 \
+  -ports 22,80,443,8000-8010 \
+  -workers 20 \
+  -timeout 500ms \
+  -output table \
+  -verbose
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `-target` | string | required | IPv4, IPv6, or hostname to scan |
+| `-ports` | string | `1-1024` | Port, list, range, or combination |
+| `-workers` | int | `100` | Maximum concurrent scanning workers |
+| `-timeout` | duration | `1s` | Timeout for each TCP connection |
+| `-output` | string | `table` | Output format: `table` or `json` |
+| `-verbose` | bool | `false` | Print real-time progress to stderr |
+
+Accepted port expressions include:
+
+```text
+80
+22,80,443
+1-1000
+22,80,8000-8010
+```
+
+Duplicate ports are removed and results are sorted in ascending order.
+
+## Output
+
+### Table
+
+```text
+PORT  STATUS  DURATION
+22    closed  59.801µs
+80    open    1.204ms
+443   closed  25.001µs
+```
+
+### JSON
+
+```json
+[
+  {
+    "port": 22,
+    "status": "closed",
+    "duration": "31.92µs"
+  },
+  {
+    "port": 80,
+    "status": "open",
+    "duration": "1.204ms"
+  }
+]
+```
+
+Verbose progress is written to stderr, so stdout remains valid table or JSON:
+
+```text
+Scanning 127.0.0.1: 3 ports with 3 workers and timeout 500ms
+[1/3] port 80: open
+[2/3] port 22: closed
+[3/3] port 443: closed
+```
+
+## Status classification
+
+- `open`: the TCP connection completed successfully.
+- `filtered`: the connection timed out.
+- `closed`: the connection failed without timing out, typically because it was
+  refused.
+
+## Architecture
+
+```text
+Port producer
+     |
+     v
+Jobs channel ---> N workers ---> Results channel ---> Aggregator ---> Sorted output
+                      |
+                      v
+                  ScanPort
+```
+
+The producer closes the jobs channel after sending every port. Workers call
+`ScanPort`, send results to a dedicated channel, and signal completion through
+`sync.WaitGroup`. A closing goroutine waits for all workers and then closes the
+results channel. The aggregator receives every result and sorts the final
+slice.
+
+## Docker
+
+Build and run directly:
+
+```bash
+docker build -t port-scanner .
+docker run --rm --network host port-scanner \
+  -target 127.0.0.1 \
+  -ports 1-1000 \
+  -workers 100 \
+  -timeout 500ms
+```
+
+On Linux, host networking allows `127.0.0.1` inside the container to refer to
+the host. Other Docker platforms may require `host.docker.internal` instead.
+
+Docker Compose has a default localhost scan:
+
+```bash
+docker compose up --build
+```
+
+Override its arguments with:
+
+```bash
+docker compose run --rm scanner \
+  -target 127.0.0.1 \
+  -ports 22,80,443 \
+  -output json
+```
+
+## Tests and quality checks
+
+```bash
+gofmt -w .
+go test -race -cover ./...
+go vet ./...
+golangci-lint run ./...
+```
+
+The tests cover port parsing, validation, open and closed TCP ports, worker
+coordination, result sorting, progress reporting, CLI validation, and both
+output formats.
 
 ## Benchmark
 
-| Método       | Portas | Tempo   |
-|--------------|--------|---------|
-| Sequencial   | 1000   | Xs      |
-| Worker Pool  | 1000   | Ys      |
+Benchmarks perform 1,000 TCP connections against a temporary local listener.
+Results from an AMD Ryzen 5 5600 running Linux:
 
-(preencher com números reais após rodar)
+| Method | Workers | Mean time | Relative speed |
+| --- | ---: | ---: | ---: |
+| Sequential | 1 | 50.88 ms | 1.0× |
+| Worker pool | 100 | 7.77 ms | 6.5× |
 
-## Arquitetura
+A separate scan of localhost ports `1-1000` with 100 workers completed in
+`0.009s` on the same machine.
 
-[Job Channel] -> [N Workers] -> [Results Channel] -> [Agregador]
+Reproduce the benchmark:
 
-## Licença
-
-MIT
+```bash
+go test -run '^$' \
+  -bench 'Benchmark(Sequential|WorkerPool)Scan$' \
+  -benchtime=3x \
+  -benchmem \
+  -count=3 \
+  ./internal/scanner
 ```
+
+Full measurements and methodology are in
+[`benchmark/results.md`](benchmark/results.md).

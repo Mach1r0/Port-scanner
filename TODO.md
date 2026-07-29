@@ -5,8 +5,8 @@ requirements in `README.md`.
 
 ## Status legend
 
-- [x] Implemented and verified
-- [ ] Missing or incomplete
+- Checked: implemented and verified
+- Unchecked: missing or incomplete
 
 ## Core scanning
 
@@ -16,7 +16,7 @@ requirements in `README.md`.
 - [x] Classify successful connections as open
 - [x] Classify connection timeouts as filtered
 - [x] Classify other connection errors as closed
-- [ ] Validate the target hostname or IP address
+- [x] Validate the target hostname or IP address
 - [x] Validate that ports are between 1 and 65535
 - [x] Parse a single port, such as `80`
 - [x] Parse comma-separated ports, such as `22,80,443`
@@ -47,7 +47,7 @@ verbose mode.
 - [x] Add `-timeout` flag with a default such as `1s`
 - [x] Add `-output` flag accepting `table` or `json`
 - [x] Add `-verbose` flag
-- [ ] Reject missing or invalid flag values with helpful messages
+- [x] Reject missing or invalid flag values with helpful messages
 - [x] Return a non-zero exit code when configuration or scanning fails
 - [x] Connect the CLI to the worker-pool scanner
 
@@ -61,16 +61,16 @@ The output package supports terminal tables and formatted JSON.
 - [x] Send normal output to stdout
 - [x] Send errors and verbose progress to stderr
 - [x] Keep silent mode limited to final results
-- [ ] Show progress when verbose mode is enabled
+- [x] Show progress when verbose mode is enabled
 
 ## Tests
 
-The parser and worker-pool tests pass with the race detector. Scanner-package
-coverage is currently 88.8%.
+Parser, worker-pool, network integration, output, and CLI tests pass with the
+race detector.
 
 - [x] Run tests with the race detector in GitHub Actions
-- [ ] Test an open port with a temporary local TCP listener
-- [ ] Test a closed port
+- [x] Test an open port with a temporary local TCP listener
+- [x] Test a closed port
 - [x] Test port-list parsing
 - [x] Test port-range parsing
 - [x] Test invalid port input
@@ -79,7 +79,7 @@ coverage is currently 88.8%.
 - [x] Test that worker-pool results are sorted
 - [x] Test table output
 - [x] Test JSON output
-- [ ] Test CLI flag parsing
+- [x] Test CLI flag parsing
 - [x] Add meaningful coverage for the main scanner functions
 
 ## Quality and automation
@@ -93,29 +93,29 @@ coverage is currently 88.8%.
 - [x] Run the container as a non-root user
 - [x] Provide a Docker Compose service
 - [x] Add real tests so the race job exercises concurrent code
-- [ ] Consider adding `go vet ./...` as an explicit CI step
+- [x] Add `go vet ./...` as an explicit CI step
 
 ## Benchmark and documentation
 
-- [ ] Implement a sequential scanning benchmark
-- [ ] Implement a worker-pool scanning benchmark
-- [ ] Compare both approaches using the same host and ports
-- [ ] Record real results in `benchmark/results.md`
-- [ ] Add real benchmark numbers to `README.md`
-- [ ] Replace the draft README section with final installation instructions
-- [ ] Document every CLI flag
-- [ ] Add table-output and JSON-output examples
-- [ ] Document local, Docker, and Docker Compose usage
-- [ ] Document that users must only scan authorized targets
+- [x] Implement a sequential scanning benchmark
+- [x] Implement a worker-pool scanning benchmark
+- [x] Compare both approaches using the same host and ports
+- [x] Record real results in `benchmark/results.md`
+- [x] Add real benchmark numbers to `README.md`
+- [x] Replace the draft README section with final installation instructions
+- [x] Document every CLI flag
+- [x] Add table-output and JSON-output examples
+- [x] Document local, Docker, and Docker Compose usage
+- [x] Document that users must only scan authorized targets
 
 ## Definition of done
 
-- [ ] Scan 1,000 local ports with 100 workers in a few seconds
+- [x] Scan 1,000 local ports with 100 workers in a few seconds
 - [x] Pass meaningful tests with `go test -race ./...`
 - [x] Pass `go vet ./...`
-- [ ] Pass `golangci-lint run ./...`
+- [x] Pass `golangci-lint run ./...`
 - [x] Produce valid table and JSON output
-- [ ] Complete the README with real examples and benchmark results
+- [x] Complete the README with real examples and benchmark results
 - [x] Maintain incremental Git history
 - [x] Provide Docker, Docker Compose, and GitHub Actions configuration
 
