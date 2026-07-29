@@ -1,7 +1,9 @@
 package scanner
 
 import (
+	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -143,5 +145,150 @@ func TestScanWithNoPorts(t *testing.T) {
 
 	if len(results) != 0 {
 		t.Fatalf("got %d results, want 0", len(results))
+	}
+}
+
+func TestValidateTarget(t *testing.T) {
+	tests := []struct {
+		name    string
+		target  string
+		wantErr bool
+	}{
+		{name: "IPv4", target: "127.0.0.1"},
+		{name: "IPv6", target: "::1"},
+		{name: "localhost", target: "localhost"},
+		{name: "hostname", target: "scanner.example.com"},
+		{name: "fully qualified hostname", target: "scanner.example.com."},
+		{name: "empty", target: "", wantErr: true},
+		{name: "whitespace", target: "   ", wantErr: true},
+		{name: "space in hostname", target: "bad target", wantErr: true},
+		{name: "underscore", target: "bad_target", wantErr: true},
+		{name: "leading hyphen", target: "-scanner.example", wantErr: true},
+		{name: "empty label", target: "scanner..example", wantErr: true},
+		{name: "invalid IPv4", target: "999.999.999.999", wantErr: true},
+		{name: "invalid IPv6", target: "2001:db8:::1", wantErr: true},
+		{name: "target with port", target: "127.0.0.1:80", wantErr: true},
+		{
+			name:    "label too long",
+			target:  strings.Repeat("a", 64) + ".example",
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateTarget(test.target)
+			if test.wantErr && err == nil {
+				t.Fatal("expected an error")
+			}
+			if !test.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestScanPortOpen(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on local port: %v", err)
+	}
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	result := ScanPort("127.0.0.1", port, time.Second)
+
+	if result.Status != StatusOpen {
+		t.Fatalf("got status %q, want %q", result.Status, StatusOpen)
+	}
+}
+
+func TestScanPortClosed(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on local port: %v", err)
+	}
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close local listener: %v", err)
+	}
+
+	result := ScanPort("127.0.0.1", port, time.Second)
+	if result.Status != StatusClosed {
+		t.Fatalf("got status %q, want %q", result.Status, StatusClosed)
+	}
+}
+
+func TestScanReportsProgress(t *testing.T) {
+	ports := []int{1, 2, 3}
+	var calls int
+
+	results, err := ScanWithProgress(
+		"127.0.0.1",
+		ports,
+		2,
+		100*time.Millisecond,
+		func(completed, total int, _ Result) {
+			calls++
+			if completed != calls {
+				t.Errorf("completed is %d, want %d", completed, calls)
+			}
+			if total != len(ports) {
+				t.Errorf("total is %d, want %d", total, len(ports))
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != len(ports) {
+		t.Fatalf("got %d results, want %d", len(results), len(ports))
+	}
+	if calls != len(ports) {
+		t.Fatalf("got %d progress calls, want %d", calls, len(ports))
+	}
+}
+
+func TestScanRejectsInvalidConfiguration(t *testing.T) {
+	tests := []struct {
+		name    string
+		host    string
+		ports   []int
+		workers int
+		timeout time.Duration
+	}{
+		{
+			name:    "invalid target",
+			host:    "bad target",
+			ports:   []int{80},
+			workers: 1,
+			timeout: time.Second,
+		},
+		{
+			name:    "invalid port",
+			host:    "127.0.0.1",
+			ports:   []int{0},
+			workers: 1,
+			timeout: time.Second,
+		},
+		{
+			name:    "invalid timeout",
+			host:    "127.0.0.1",
+			ports:   []int{80},
+			workers: 1,
+			timeout: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Scan(test.host, test.ports, test.workers, test.timeout)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+		})
 	}
 }
